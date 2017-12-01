@@ -19,9 +19,9 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var coaStoreSettings map[interface{}]interface{}
+var coaStoreSettings map[string]interface{}
 
-var newStore func(map[interface{}]interface{}, *string) (interface{}, error)
+var newStore func(map[string]interface{}, *string) (interface{}, error)
 
 var provider *oidc.Provider
 var verifier *oidc.IDTokenVerifier
@@ -145,21 +145,25 @@ func main() {
 		fmt.Printf("usage: %v settings", path.Base(os.Args[0]))
 		return
 	}
-	f, err := os.Open(os.Args[1])
+	data, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
-	data, err := ioutil.ReadAll(f)
-	if err != nil {
-		log.Fatal(err)
+	var settings struct {
+		CoaStore struct {
+			PluginFile string                 `yaml:"PluginFile"`
+			Settings   map[string]interface{} `yaml:",inline"`
+		} `yaml:"CoaStore"`
+		OpenId struct {
+			Provider string `yaml:"Provider"`
+			ClientId string `yaml:"ClientId"`
+		} `yaml:"OpenId"`
 	}
-	settings := map[interface{}]interface{}{}
 	err = yaml.Unmarshal(data, &settings)
 	if err != nil {
 		log.Fatal(err)
 	}
-	coaStoreSettings = settings["CoaStore"].(map[interface{}]interface{})
-	p, err := plugin.Open(coaStoreSettings["PluginFile"].(string))
+	p, err := plugin.Open(settings.CoaStore.PluginFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -167,13 +171,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	newStore = symbol.(func(map[interface{}]interface{}, *string) (interface{}, error))
-	openidSettings := settings["OpenId"].(map[interface{}]interface{})
-	provider, err = oidc.NewProvider(context.Background(), openidSettings["Provider"].(string))
+	newStore = symbol.(func(map[string]interface{}, *string) (interface{}, error))
+	coaStoreSettings = settings.CoaStore.Settings
+	provider, err = oidc.NewProvider(context.Background(), settings.OpenId.Provider)
 	if err != nil {
 		log.Fatal(err)
 	}
-	verifier = provider.Verifier(&oidc.Config{ClientID: openidSettings["ClientId"].(string)})
+	verifier = provider.Verifier(&oidc.Config{ClientID: settings.OpenId.ClientId})
 	router := httprouter.New()
 	router.GET("/charts-of-accounts", handler(chartsOfAccounts))
 	router.POST("/charts-of-accounts", handler(saveChartsOfAccounts))
