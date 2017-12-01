@@ -28,13 +28,13 @@ var verifier *oidc.IDTokenVerifier
 
 type repository struct {
 	*coa.CoaRepository
-	prefix string
+	user string
 }
 
 var repositoryPool = sync.Pool{
 	New: func() interface{} {
 		r := &repository{}
-		v, err := newStore(coaStoreSettings, &r.prefix)
+		v, err := newStore(coaStoreSettings, &r.user)
 		if err != nil {
 			panic(err)
 		}
@@ -54,7 +54,7 @@ func handler(
 			return
 		}
 		cr := repositoryPool.Get().(*repository)
-		cr.prefix = user
+		cr.user = user
 		defer repositoryPool.Put(cr)
 		v, err := f(cr, ps, func(v interface{}) error {
 			return json.NewDecoder(r.Body).Decode(v)
@@ -85,7 +85,7 @@ func saveChartsOfAccounts(cr *repository, ps httprouter.Params, d decoder) (inte
 	if ps.ByName("coa") != "" {
 		c.Id = ps.ByName("coa")
 	}
-	c.User = cr.prefix
+	c.User = cr.user
 	return cr.SaveChartOfAccounts(c)
 }
 
@@ -105,7 +105,7 @@ func saveAccount(cr *repository, ps httprouter.Params, d decoder) (interface{}, 
 	if ps.ByName("account") != "" {
 		a.Id = ps.ByName("account")
 	}
-	a.User = cr.prefix
+	a.User = cr.user
 	return cr.SaveAccount(ps.ByName("coa"), a)
 }
 
