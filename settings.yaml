@@ -1,0 +1,6 @@
+CoaStore:
+    PluginFile: ../coa-redis/plugin/plugin.so
+    Addresses: ["redis:6379"]
+OpenId:
+    Provider: https://accounts.google.com
+    ClientId: 946769606583-mthfmq6d01gp3ruq5rebvdo4fjp00s3b.apps.googleusercontent.com
