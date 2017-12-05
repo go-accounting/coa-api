@@ -4,24 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path"
-	"plugin"
 	"strings"
 	"sync"
 
 	oidc "github.com/coreos/go-oidc"
 	"github.com/go-accounting/coa"
+	"github.com/go-accounting/config"
 	"github.com/julienschmidt/httprouter"
-	"gopkg.in/yaml.v2"
 )
 
-var coaStoreSettings map[string]interface{}
-
-var newStore func(map[string]interface{}, *string) (interface{}, error)
+var cfg config.Config
 
 var provider *oidc.Provider
 var verifier *oidc.IDTokenVerifier
@@ -34,7 +30,7 @@ type repository struct {
 var repositoryPool = sync.Pool{
 	New: func() interface{} {
 		r := &repository{}
-		v, err := newStore(coaStoreSettings, &r.user)
+		v, err := cfg.Run("NewKeyValueStore", &r.user)
 		if err != nil {
 			panic(err)
 		}
@@ -145,39 +141,16 @@ func main() {
 		fmt.Printf("usage: %v settings", path.Base(os.Args[0]))
 		return
 	}
-	data, err := ioutil.ReadFile(os.Args[1])
+	var err error
+	cfg, err = config.New(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
-	var settings struct {
-		CoaStore struct {
-			PluginFile string                 `yaml:"PluginFile"`
-			Settings   map[string]interface{} `yaml:",inline"`
-		} `yaml:"CoaStore"`
-		OpenId struct {
-			Provider string `yaml:"Provider"`
-			ClientId string `yaml:"ClientId"`
-		} `yaml:"OpenId"`
-	}
-	err = yaml.Unmarshal(data, &settings)
+	provider, err = oidc.NewProvider(context.Background(), cfg["OpenId/Provider"].(string))
 	if err != nil {
 		log.Fatal(err)
 	}
-	p, err := plugin.Open(settings.CoaStore.PluginFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	symbol, err := p.Lookup("NewKeyValueStore")
-	if err != nil {
-		log.Fatal(err)
-	}
-	newStore = symbol.(func(map[string]interface{}, *string) (interface{}, error))
-	coaStoreSettings = settings.CoaStore.Settings
-	provider, err = oidc.NewProvider(context.Background(), settings.OpenId.Provider)
-	if err != nil {
-		log.Fatal(err)
-	}
-	verifier = provider.Verifier(&oidc.Config{ClientID: settings.OpenId.ClientId})
+	verifier = provider.Verifier(&oidc.Config{ClientID: cfg["OpenId/ClientId"].(string)})
 	router := httprouter.New()
 	router.GET("/charts-of-accounts", handler(chartsOfAccounts))
 	router.POST("/charts-of-accounts", handler(saveChartsOfAccounts))
